@@ -8,7 +8,7 @@ source.include_exts = py,png,jpg,jpeg,kv,atlas,ttf,otf,json
 
 version = 1.0.1
 
-requirements = python3==3.13.2,kivy==2.3.1,pillow,requests
+requirements = python3,kivy==2.3.1,pillow,requests
 
 orientation = portrait
 fullscreen = 0
@@ -22,6 +22,8 @@ android.archs = arm64-v8a
 
 android.allow_backup = True
 android.accept_sdk_license = True
+
+p4a.commit = 957a3e5f8c270f7aa648ba185e5a68c1077a798d
 
 [buildozer]
 log_level = 2
