@@ -6,9 +6,9 @@ package.domain = com.mohammed.debtbook
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,kv,atlas,ttf,otf,json
 
-version = 1.0.0
+version = 1.0.1
 
-requirements = python3,kivy==2.3.0,pillow,requests
+requirements = python3==3.13.2,kivy==2.3.1,pillow,requests
 
 orientation = portrait
 fullscreen = 0
