@@ -46,6 +46,9 @@ def ensure_package(pip_name, import_name=None):
             pass
 
 
+ensure_package("kivy")
+ensure_package("pillow", "PIL")
+
 # ============================================================
 # 2) الاستيرادات
 # ============================================================
@@ -79,9 +82,81 @@ from kivy.clock import Clock
 # ############################################################
 # ############################################################
 TERMS_TEXT = """
-ضع هنا نص شروط الاستخدام كاملاً.
-يمكنك كتابة عدة فقرات، وكل سطر جديد يُعرض كسطر جديد.
-.......................................
+شروط الاستخدام – تطبيق دفتر ديون الزهوب
+آخر تحديث: 2026
+
+مرحباً بك في تطبيق "دفتر ديون الزهوب". باستخدامك للتطبيق أو التسجيل فيه فإنك تقر وتوافق على جميع الشروط والأحكام الواردة أدناه. يرجى قراءتها بعناية قبل الاستخدام، فإن لم توافق على أي بند منها يجب عليك التوقف عن استخدام التطبيق فوراً.
+
+١) التعريفات
+يقصد بالمصطلحات التالية المعاني الموضحة قرينها:
+- "التطبيق": تطبيق دفتر ديون الزهوب بجميع إصداراته وخدماته.
+- "المستخدم": كل شخص يقوم بإنشاء حساب أو يستخدم التطبيق بأي شكل.
+- "البيانات": كل ما يدخله المستخدم من أسماء عملاء، أرقام، فواتير، سندات، مبالغ، ملاحظات، أو أي معلومات أخرى.
+- "القنوات": قنوات تليجرام الخاصة المستخدمة لتخزين ومزامنة البيانات.
+- "الخدمة": الوظائف التي يوفرها التطبيق من تسجيل ديون، إصدار فواتير وسندات وكشوفات، ومزامنة البيانات.
+
+٢) طبيعة التطبيق
+- التطبيق أداة مساعدة لتنظيم وتسجيل الديون والفواتير وسندات القبض وكشوف الحساب.
+- التطبيق ليس جهة تمويل ولا وسيطاً مالياً ولا يقدم أي خدمات مصرفية أو ائتمانية.
+- التطبيق لا يتحمل أي مسؤولية عن صحة البيانات التي يدخلها المستخدم، وعليه وحده تقع مسؤولية دقتها وصدقها.
+
+٣) التسجيل والحساب
+- يجب على المستخدم إدخال بيانات صحيحة وكاملة عند التسجيل (الاسم الرباعي، اسم المشروع، الموقع، رقم التاجر، بريد إلكتروني من نوع Gmail، وكلمة مرور).
+- يلتزم المستخدم بالحفاظ على سرية كلمة المرور وعدم مشاركتها مع أي شخص آخر.
+- المستخدم مسؤول مسؤولية كاملة عن كل نشاط يحدث من خلال حسابه.
+- يحق للإدارة إيقاف أو حذف أي حساب يثبت استخدامه لأغراض مخالفة أو ضارة.
+
+٤) استخدام التطبيق
+يلتزم المستخدم بما يلي:
+- عدم استخدام التطبيق في أي نشاط غير قانوني أو مخالف للأنظمة السارية.
+- عدم محاولة اختراق التطبيق أو التلاعب ببياناته أو بيانات المستخدمين الآخرين.
+- عدم إدخال بيانات كاذبة أو مضللة أو مسيئة.
+- عدم استخدام التطبيق للإضرار بالآخرين أو التشهير بهم أو انتهاك خصوصيتهم.
+- الالتزام بعدم إرسال رسائل واتساب أو غيرها لأشخاص دون موافقتهم ووفق الأنظمة المعمول بها.
+
+٥) البيانات والخصوصية
+- تُخزَّن بيانات المستخدم محلياً على جهازه، كما تُخزَّن نسخة منها في قنوات تليجرام الخاصة التابعة للتطبيق لأغراض المزامنة بين الأجهزة.
+- يتم نقل البيانات بين الجهاز والقنوات عبر واجهة تليجرام الرسمية باستخدام بوت مخصص، والقراءة تتم بطريقة لا تُفرِّغ القنوات.
+- المستخدم يقر ويعلم أن بياناته تُخزَّن على خوادم تليجرام، ويخضع ذلك لسياسات تليجرام الخاصة.
+- لا نبيع البيانات ولا نشاركها مع أطراف تجارية، ولا نستخدمها إلا لتشغيل الخدمة.
+- يمكن للمستخدم حذف حسابه نهائياً من داخل التطبيق، وسيتم عندها حذف بياناته من الجهاز ومن القنوات قدر الإمكان التقني.
+
+٦) المزامنة والأجهزة
+- يدعم التطبيق المزامنة بين عدة أجهزة لنفس الحساب، كما يدعم تعدد الحسابات على الجهاز نفسه.
+- عند المزامنة يتم دمج البيانات وفق أحدث تعديل، مع دعم حذف العمليات (خاصية الحذف النهائي).
+- المستخدم مسؤول عن إجراء المزامنة بشكل دوري لضمان تحديث البيانات.
+- عند تغيير كلمة المرور يتم إنهاء الجلسات على الأجهزة الأخرى تلقائياً.
+- يمكن للمستخدم طرد أي جهاز من قائمة الأجهزة المتصلة بحسابه.
+
+٧) الفواتير والسندات وكشوف الحساب
+- يقوم التطبيق بإنشاء الفواتير والسندات وكشوف الحساب على شكل صور PNG وملفات PDF.
+- تكون هذه المستندات صادرة بناءً على البيانات التي أدخلها المستخدم، ولا تُعد سنداً قانونياً بحد ذاتها إلا إذا اعتُمدت رسمياً من الجهات المختصة.
+- يتحمل المستخدم مسؤولية أي مستند يرسله لأي طرف ثالث، ويقر بأن التطبيق وسيلة تنظيمية فقط.
+
+٨) حدود المسؤولية
+- يقدم التطبيق "كما هو" دون أي ضمانات صريحة أو ضمنية.
+- لا يتحمل التطبيق أو مطوّره أي مسؤولية عن أي خسارة مالية أو ضرر مباشر أو غير مباشر ناتج عن استخدام التطبيق أو تعطل الخدمة أو فقدان البيانات.
+- لا يتحمل التطبيق مسؤولية انقطاع خدمة الإنترنت أو تعطل خدمات تليجرام أو واتساب أو أي طرف ثالث.
+- المستخدم مسؤول عن أخذ نسخ احتياطية من بياناته المهمة، ويمكنه استخدام المزامنة لذلك.
+
+٩) التعديلات على الشروط
+- يحق للإدارة تعديل هذه الشروط في أي وقت، وسيتم إشعار المستخدم بذلك داخل التطبيق.
+- استمرار المستخدم في استخدام التطبيق بعد التعديل يُعد موافقة ضمنية على الشروط المحدَّثة.
+
+١٠) إنهاء الخدمة
+- يحق للمستخدم التوقف عن استخدام التطبيق في أي وقت، كما يمكنه حذف حسابه نهائياً.
+- يحق للإدارة إيقاف الخدمة أو أي حساب مخالف دون إشعار مسبق.
+- عند حذف الحساب تُحذف البيانات من الجهاز ومن قنوات المزامنة قدر الإمكان التقني.
+
+١١) حقوق الملكية
+- جميع حقوق التطبيق من تصميم وبرمجة وواجهات تعود لمطوّره.
+- لا يجوز نسخ التطبيق أو إعادة نشره أو تعديله أو بيعه دون إذن كتابي مسبق.
+
+١٢) القانون الواجب التطبيق
+- تخضع هذه الشروط وتُفسَّر وفقاً للأنظمة المعمول بها في بلد المستخدم، وأي نزاع ينشأ عنها يُحل ودياً، فإن تعذّر ذلك فيُحال إلى الجهات المختصة.
+
+١٣) إقرار المستخدم
+- بالضغط على "أوافق" عند التسجيل، فإنك تقر بأنك قرأت هذه الشروط كاملة وفهمتها ووافقت عليها، وتتحمل مسؤولية استخدام التطبيق وفق ما ورد فيها.
 """
 # ############################################################
 # ############################################################
@@ -99,6 +174,7 @@ TERMS_TEXT = """
 SEND_BOT_TOKEN = "8978024468:AAEcB6xVLXxLNduToBHDvLfM0sgjMHDe-z0"
 USERS_CHANNEL_ID = "-1004361387248"
 CLIENTS_CHANNEL_ID = "-1004442637860"
+DOWNLOADS_CHANNEL_ID = "-1003753120351"   # الخطوط (وبعدها الإعلانات)
 
 CHUNK_SIZE = 3600          # حجم الجزء الواحد (حد تليجرام 4096 حرف)
 
@@ -417,6 +493,74 @@ class TgDB:
 
 
 DB = TgDB(SEND_BOT_TOKEN, USERS_CHANNEL_ID, CLIENTS_CHANNEL_ID)
+
+
+# ---------- التحميلات (خطوط / إعلانات لاحقاً) ----------
+def dl_probe(mid):
+    """يقرأ بيانات الملف في الرسالة mid بدون أي أثر. يرجع (gone, doc)."""
+    r = DB.call("forwardMessage", {"chat_id": DB.users_ch,
+                                   "from_chat_id": DOWNLOADS_CHANNEL_ID,
+                                   "message_id": mid,
+                                   "disable_notification": "true"})
+    if not r.get("ok"):
+        d = str(r.get("description", "")).lower()
+        if ("chat not found" in d or "not a member" in d
+                or r.get("error_code") in (401, 403)):
+            raise TgError("تعذر الوصول إلى الخطوط المتاحة")
+        if r.get("error_code") == 429 or "retry" in d:
+            raise TgError("تعذر الاتصال، حاول لاحقاً")
+        if DB._gone(r) or r.get("error_code") == 400:
+            return True, None
+        raise TgError(DB._err(r))
+    msg = r["result"]
+    DB.delete(DB.users_ch, msg.get("message_id"))
+    return False, (msg.get("document") or {})
+
+
+def scan_downloads(catalog, tolerance=25):
+    """يمسح الرسائل الجديدة ويضيف الملفات للفهرس المحلي (تراكمي)."""
+    items = catalog.setdefault("items", {})
+    mid = int(catalog.get("last", 0))
+    newest = mid
+    misses = 0
+    while misses < tolerance:
+        mid += 1
+        gone, doc = dl_probe(mid)
+        if gone:
+            misses += 1
+            continue
+        misses = 0
+        newest = mid
+        if doc and doc.get("file_name"):
+            items[doc["file_name"]] = {"mid": mid,
+                                       "size": int(doc.get("file_size") or 0)}
+    catalog["last"] = newest
+    return catalog
+
+
+def download_font(name, item):
+    gone, doc = dl_probe(int(item["mid"]))
+    if gone or not doc or doc.get("file_name") != name:
+        raise TgError("الخط غير متاح حالياً")
+    r = DB.call("getFile", {"file_id": doc["file_id"]})
+    if not r.get("ok"):
+        raise TgError("تعذر تحميل الخط")
+    url = "https://api.telegram.org/file/bot%s/%s" % (
+        DB.token, r["result"]["file_path"])
+    os.makedirs(FONT_STORE, exist_ok=True)
+    tmp = os.path.join(FONT_STORE, name + ".part")
+    final = os.path.join(FONT_STORE, name)
+    with urllib.request.urlopen(url, timeout=60) as resp, open(tmp, "wb") as f:
+        while True:
+            chunk = resp.read(65536)
+            if not chunk:
+                break
+            f.write(chunk)
+    if os.path.getsize(tmp) < 1000:
+        os.remove(tmp)
+        raise TgError("الملف غير صالح")
+    os.replace(tmp, final)
+    register_user_fonts()
 
 
 def merge_client_data(server_data, local_clients, local_deleted):
@@ -932,9 +1076,20 @@ def _font_name():
     return FONT_NAME if FONT_REGISTERED else "Roboto"
 
 
-# ---- الخطوط الاثنا عشر (يختار المستخدم من الإعدادات) ----
-FONT_FILES = ["font.otf"] + ["font%d.otf" % i for i in range(1, 12)]
+# ---- الخطوط: font.otf هو الأساسي، والباقي (font1.otf ...) يُنزَّل من الإعدادات ----
 USER_FONTS = {}        # اسم الملف -> (الاسم المسجّل، المسار)
+FONT_NAME_RE = re.compile(r"font\d*\.otf")
+
+
+def font_sort_key(fn):
+    m = re.fullmatch(r"font(\d*)\.otf", fn)
+    return int(m.group(1) or 0) if m else 10 ** 6
+
+
+def font_label(fn):
+    m = re.fullmatch(r"font(\d*)\.otf", fn)
+    n = int(m.group(1) or 0) if m else 0
+    return "الخط الأساسي" if n == 0 else "خط %d" % n
 
 
 def _find_font_file(fn):
@@ -949,37 +1104,38 @@ def _find_font_file(fn):
     return None
 
 
-for _i, _fn in enumerate(FONT_FILES):
-    _fp = _find_font_file(_fn)
-    if _fp:
-        USER_FONTS[_fn] = ("UserFont%d" % _i, _fp)
-
-_REGISTERED_USER_FONTS = set()
-
-
-def _ensure_user_font(fn):
-    info = USER_FONTS.get(fn)
-    if not info:
-        return None
-    _nm, _fp = info
-    if fn in _REGISTERED_USER_FONTS:
-        return _nm
+def register_user_fonts():
+    """يسجّل font.otf الأساسي + أي خط تم تنزيله سابقاً."""
+    cands = {}
+    base = _find_font_file("font.otf")
+    if base:
+        cands["font.otf"] = base
     try:
-        LabelBase.register(name=_nm, fn_regular=_fp)
-        _REGISTERED_USER_FONTS.add(fn)
-        return _nm
-    except Exception as _e:
-        print(f"[FONT] user font {_fp}: {_e}")
-        return None
+        for f in os.listdir(FONT_STORE):
+            p = os.path.join(FONT_STORE, f)
+            if (FONT_NAME_RE.fullmatch(f) and f != "font.otf"
+                    and os.path.getsize(p) > 1000):
+                cands[f] = p
+    except Exception:
+        pass
+    for fn, p in cands.items():
+        if USER_FONTS.get(fn, (None, None))[1] == p:
+            continue
+        nm = "UF_" + fn.replace(".", "_")
+        try:
+            LabelBase.register(name=nm, fn_regular=p)
+            USER_FONTS[fn] = (nm, p)
+        except Exception as e:
+            print(f"[FONT] user font {fn}: {e}")
 
 
 def set_app_font(fn):
     """يفعّل الخط fn لكل التطبيق (الشاشة + صور الفواتير). يرجع True لو نجح."""
     global FONT_NAME, FONT_PATH, FONT_REGISTERED
-    _nm = _ensure_user_font(fn)
-    if not _nm:
+    info = USER_FONTS.get(fn)
+    if not info:
         return False
-    FONT_NAME, FONT_PATH = _nm, USER_FONTS[fn][1]
+    FONT_NAME, FONT_PATH = info
     FONT_REGISTERED = True
     return True
 
@@ -997,6 +1153,12 @@ else:
     DATA_DIR = APP_DIR
 
 DATA_FILE = os.path.join(DATA_DIR, "debtbook_data.json")
+FONT_STORE = os.path.join(DATA_DIR, "dl_fonts")
+try:
+    os.makedirs(FONT_STORE, exist_ok=True)
+except Exception:
+    pass
+register_user_fonts()
 
 
 def load_json(path, default):
@@ -3851,7 +4013,16 @@ class FontScreen(Screen):
     def __init__(self, app, **kwargs):
         super().__init__(**kwargs)
         self.app = app
+        self.status_text = ""
+        self.scanning = False
+        self.downloading = None
         self.build_ui()
+        self.refresh_catalog()
+
+    def _names(self):
+        items = (self.app.data.get("dl") or {}).get("items", {})
+        names = set(USER_FONTS) | {n for n in items if FONT_NAME_RE.fullmatch(n)}
+        return sorted(names, key=font_sort_key)
 
     def build_ui(self):
         root = BoxLayout(orientation="vertical", spacing=0)
@@ -3859,44 +4030,122 @@ class FontScreen(Screen):
             "تغيير الخط", HEADER,
             on_back=lambda *a: self.app.open_settings(back=True)))
         body = make_body(padding=[dp(12), dp(10), dp(12), dp(10)])
+        self.status = mk_text(self.status_text, dp(13), MUTED,
+                              halign="center", height=dp(28))
+        body.add_widget(self.status)
         scroll, lay = make_scroll_list(spacing=dp(8))
         cur = self.app.data.get("font") or "font.otf"
-        n = 0
-        for i, fn in enumerate(FONT_FILES):
+        items = (self.app.data.get("dl") or {}).get("items", {})
+        for fn in self._names():
             info = USER_FONTS.get(fn)
-            if not info:
-                continue
-            font_name = _ensure_user_font(fn)
-            if not font_name:
-                continue
-            n += 1
-            sel = (fn == cur)
-            row = CardBox(orientation="vertical", size_hint_y=None,
-                          height=dp(84), padding=[dp(12), dp(6)],
-                          bg=(SOFT_BLUE if sel else None),
-                          on_tap=lambda f=fn: self.pick(f))
-            sample = DrawnText(text="دفتر ديون الزهوب", font_size=dp(22),
-                               color=TEXT, halign="center",
-                               size_hint_y=0.62, font_override=font_name)
-            sample.disabled = True
-            row.add_widget(sample)
-            label = f"خط {i + 1}" + ("  -  المستخدم حالياً" if sel else "")
-            row.add_widget(mk_text(label, dp(12), PRIMARY if sel else MUTED,
-                                   halign="center", hint_y=0.38))
+            if info:                       # مثبّت: عرض الاسم بنفس الخط
+                sel = (fn == cur)
+                row = CardBox(orientation="vertical", size_hint_y=None,
+                              height=dp(84), padding=[dp(12), dp(6)],
+                              bg=(SOFT_BLUE if sel else None),
+                              on_tap=lambda f=fn: self.pick(f))
+                sample = DrawnText(text="دفتر ديون الزهوب", font_size=dp(22),
+                                   color=TEXT, halign="center",
+                                   size_hint_y=0.62, font_override=info[0])
+                sample.disabled = True
+                row.add_widget(sample)
+                label = font_label(fn) + ("  -  المستخدم حالياً" if sel else "")
+                row.add_widget(mk_text(label, dp(12),
+                                       PRIMARY if sel else MUTED,
+                                       halign="center", hint_y=0.38))
+            else:                          # غير منزَّل بعد
+                row = CardBox(orientation="horizontal", size_hint_y=None,
+                              height=dp(74), padding=[dp(12), dp(8)],
+                              spacing=dp(8))
+                busy = (self.downloading == fn)
+                if not busy:
+                    btn = mk_btn("تحميل", size_hint=(None, None),
+                                 size=(dp(80), dp(38)), font_size=dp(14),
+                                 background_color=GREEN,
+                                 pos_hint={"center_y": 0.5})
+                    btn.bind(on_release=lambda w, f=fn: self.download(f))
+                    row.add_widget(btn)
+                box = BoxLayout(orientation="vertical")
+                kb = max(1, int((items.get(fn) or {}).get("size", 0) / 1024))
+                box.add_widget(mk_text(font_label(fn), dp(16), TEXT,
+                                       hint_y=0.55))
+                box.add_widget(mk_text(
+                    "جاري التحميل..." if busy else f"الحجم: {kb} KB",
+                    dp(12), MUTED, hint_y=0.45))
+                row.add_widget(box)
             lay.add_widget(row)
-        if n == 0:
-            lay.add_widget(mk_text("لم يتم العثور على ملفات الخطوط داخل التطبيق",
-                                   dp(14), RED, halign="center",
-                                   height=dp(40)))
         body.add_widget(scroll)
+        upd = mk_btn("تحديث القائمة", height=dp(46), font_size=dp(15),
+                     background_color=BLUE)
+        upd.bind(on_release=lambda *a: self.refresh_catalog())
+        body.add_widget(upd)
         root.add_widget(body)
         self.add_widget(root)
 
-    def pick(self, fn):
-        self.app.set_font(fn)
+    def _rebuild(self):
         self.clear_widgets()
         self.build_ui()
         schedule_refresh(0.05)
+
+    def refresh_catalog(self):
+        if self.scanning:
+            return
+        self.scanning = True
+        self.status.text = "جاري البحث عن الخطوط المتاحة..."
+
+        def w():
+            err = None
+            try:
+                cat = self.app.data.setdefault("dl", {})
+                scan_downloads(cat)
+                self.app.save()
+            except TgError as e:
+                err = str(e)
+            except Exception:
+                err = "تعذر الاتصال، تحقق من الانترنت"
+            Clock.schedule_once(lambda dt: self._after_scan(err), 0)
+
+        threading.Thread(target=w, daemon=True).start()
+
+    def _after_scan(self, err):
+        self.scanning = False
+        if err:
+            self.status_text = err
+        else:
+            new = [n for n in self._names() if n not in USER_FONTS]
+            self.status_text = (f"تتوفر {len(new)} خطوط للتحميل" if new
+                                else "لا توجد خطوط جديدة للتحميل")
+        self._rebuild()
+
+    def download(self, fn):
+        if self.downloading:
+            return
+        item = ((self.app.data.get("dl") or {}).get("items", {})).get(fn)
+        if not item:
+            return
+        self.downloading = fn
+        self._rebuild()
+
+        def w():
+            err = None
+            try:
+                download_font(fn, item)
+            except TgError as e:
+                err = str(e)
+            except Exception:
+                err = "فشل التحميل، تحقق من الانترنت"
+            Clock.schedule_once(lambda dt: self._after_download(fn, err), 0)
+
+        threading.Thread(target=w, daemon=True).start()
+
+    def _after_download(self, fn, err):
+        self.downloading = None
+        self.status_text = err or f"تم تحميل {font_label(fn)}"
+        self._rebuild()
+
+    def pick(self, fn):
+        self.app.set_font(fn)
+        self._rebuild()
 
 
 class AccountsScreen(Screen):
@@ -4496,7 +4745,7 @@ class DebtBookApp(App):
     def wipe_local_and_restart(self):
         """يحذف data.json بالكامل ويرجع التطبيق كأنه أول مرة."""
         keep = {k: self.data.get(k) for k in
-                ("accounts", "device_id", "font", "theme")
+                ("accounts", "device_id", "font", "theme", "dl")
                 if self.data.get(k) is not None}
         for p in (DATA_FILE, DATA_FILE + ".tmp"):
             try:
