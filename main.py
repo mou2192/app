@@ -26,6 +26,8 @@ import time
 import hashlib
 import base64
 import zlib
+import re
+import textwrap
 from datetime import datetime
 
 
@@ -70,6 +72,25 @@ import weakref
 from kivy.metrics import dp
 from kivy.utils import platform
 from kivy.clock import Clock
+
+
+# ############################################################
+# ############################################################
+# ##                                                        ##
+# ##     >>>>>>>>>>   شروط الاستخدام - ضع نصك هنا   <<<<<<<<<< ##
+# ##                                                        ##
+# ############################################################
+# ############################################################
+TERMS_TEXT = """
+ضع هنا نص شروط الاستخدام كاملاً.
+يمكنك كتابة عدة فقرات، وكل سطر جديد يُعرض كسطر جديد.
+.......................................
+"""
+# ############################################################
+# ############################################################
+# ##                 نهاية شروط الاستخدام                   ##
+# ############################################################
+# ############################################################
 
 
 # ============================================================
@@ -202,7 +223,7 @@ class TgDB:
         """يرجع (message_id أو None, dict)."""
         r = self.call("getChat", {"chat_id": self.users_ch})
         if not r.get("ok"):
-            raise TgError("تعذر الاتصال بالقناة: " + self._err(r))
+            raise TgError("تعذر الاتصال بالنت: " + self._err(r))
         pm = (r.get("result") or {}).get("pinned_message")
         if pm and (pm.get("text") or "").startswith("#INDEX"):
             try:
@@ -257,14 +278,19 @@ class TgDB:
                     pass
         return self._legacy_find(email)
 
-    def create_user(self, email, name, password):
+    def create_user(self, email, name, password, shop="", loc="", phone="",
+                    dev_id="", dev_name=""):
         email = email.strip().lower()
         rec, _m = self.get_user(email)
         if rec:
             raise TgError("البريد مستخدم مسبقاً")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         rec = {"type": "user", "email": email, "name": name,
+               "shop": shop, "loc": loc, "phone": phone,
                "pw": hash_password(password), "cl": [],
-               "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+               "sv": 1,
+               "dev": ({dev_id: {"n": dev_name, "t": now}} if dev_id else {}),
+               "created": now}
         text = f"#USER:{email}\n" + json.dumps(rec, ensure_ascii=False)
         mid = self.send(self.users_ch, text)
         try:
@@ -478,6 +504,40 @@ def gen_id():
     ts = datetime.now().strftime("%Y%m%d%H%M%S")
     rand = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
     return f"{ts}_{rand}"
+
+
+def get_device_name():
+    try:
+        if platform == "android":
+            from jnius import autoclass
+            B = autoclass("android.os.Build")
+            return ("%s %s" % (B.MANUFACTURER, B.MODEL)).strip()[:40] or "جهاز"
+    except Exception:
+        pass
+    try:
+        import socket
+        return socket.gethostname()[:40] or "جهاز"
+    except Exception:
+        return "جهاز"
+
+
+# بيانات البائع الحالي (تظهر أسفل الفواتير وكشف الحساب وسند القبض)
+SELLER = {"name": "", "shop": "", "loc": "", "phone": ""}
+
+
+def set_seller(user):
+    user = user or {}
+    for k in SELLER:
+        SELLER[k] = str(user.get(k, "") or "")
+
+
+def seller_lines():
+    out = []
+    if SELLER.get("shop"):
+        out.append(SELLER["shop"])
+    if SELLER.get("phone"):
+        out.append("للتواصل: " + SELLER["phone"])
+    return out
 
 
 # ============================================================
@@ -875,6 +935,46 @@ def _font_name():
     return FONT_NAME if FONT_REGISTERED else "Roboto"
 
 
+# ---- الخطوط الاثنا عشر (يختار المستخدم من الإعدادات) ----
+FONT_FILES = ["font.otf"] + ["font%d.otf" % i for i in range(1, 12)]
+USER_FONTS = {}        # اسم الملف -> (الاسم المسجّل، المسار)
+
+
+def _find_font_file(fn):
+    for d in (APP_DIR, os.path.join(APP_DIR, "fonts"), FONT_DIR,
+              "/sdcard/debtbook_fonts", "/sdcard/Download"):
+        p = os.path.join(d, fn)
+        try:
+            if os.path.exists(p) and os.path.getsize(p) > 1000:
+                return p
+        except Exception:
+            pass
+    return None
+
+
+for _i, _fn in enumerate(FONT_FILES):
+    _fp = _find_font_file(_fn)
+    if not _fp:
+        continue
+    _nm = "UserFont%d" % _i
+    try:
+        LabelBase.register(name=_nm, fn_regular=_fp)
+        USER_FONTS[_fn] = (_nm, _fp)
+    except Exception as _e:
+        print(f"[FONT] user font {_fn}: {_e}")
+
+
+def set_app_font(fn):
+    """يفعّل الخط fn لكل التطبيق (الشاشة + صور الفواتير). يرجع True لو نجح."""
+    global FONT_NAME, FONT_PATH, FONT_REGISTERED
+    info = USER_FONTS.get(fn)
+    if not info:
+        return False
+    FONT_NAME, FONT_PATH = info
+    FONT_REGISTERED = True
+    return True
+
+
 # ============================================================
 # 8) مسار البيانات
 # ============================================================
@@ -975,8 +1075,9 @@ class DrawnText(Widget):
 
     def __init__(self, text="", font_size=dp(15), color=None,
                  halign="right", valign="middle", padding_x=None,
-                 min_size=dp(9), line_gap=dp(3), **kwargs):
+                 min_size=dp(9), line_gap=dp(3), font_override=None, **kwargs):
         super().__init__(**kwargs)
+        self._font_override = font_override
         if color is None:
             color = TEXT
         self._raw_text = ""
@@ -1011,18 +1112,19 @@ class DrawnText(Widget):
         self._redraw()
 
     def _get_tex(self, display, size_int):
-        key = (display, size_int, _font_name(), tuple(self._color))
+        fname = getattr(self, "_font_override", None) or _font_name()
+        key = (display, size_int, fname, tuple(self._color))
         cached = DrawnText._tex_cache.get(key)
         if cached is not None:
             return cached
         tex = None
         attempts = [
-            dict(text=display, font_size=size_int, font_name=_font_name(),
+            dict(text=display, font_size=size_int, font_name=fname,
                  color=self._color, halign="left", valign="middle",
                  padding=(0, 0, 0, 0)),
-            dict(text=display, font_size=size_int, font_name=_font_name(),
+            dict(text=display, font_size=size_int, font_name=fname,
                  color=self._color),
-            dict(text=display, font_size=size_int, font_name=_font_name()),
+            dict(text=display, font_size=size_int, font_name=fname),
         ]
         for opts in attempts:
             try:
@@ -1768,7 +1870,7 @@ def build_item_form(on_add):
 
     row3 = BoxLayout(size_hint_y=None, height=dp(72), spacing=dp(10))
     dcol = BoxLayout(orientation="vertical", spacing=dp(4))
-    dcol.add_widget(mk_text("الخصم (مبلغ يُخصم من مجموع الصنف)",
+    dcol.add_widget(mk_text("الخصم )مبلغ يُخصم من مجموع الصنف(",
                             dp(13), MUTED, height=dp(20)))
     disc_in = mk_input(hint_text="0", input_filter="float",
                        size_hint_y=None, height=dp(46))
@@ -1959,6 +2061,7 @@ def build_invoice_text(c, inv):
     lines.append(f"اصبح حسابكم {money_signed(after)}")
     lines.append("يرجى السداد في اقرب وقت")
     lines.append(str(d.year))
+    lines.extend(seller_lines())
     return "\n".join(lines)
 
 
@@ -1971,7 +2074,7 @@ def build_receipt_text(c, inv):
         f"الحساب السابق: {money_signed(prev)}",
         f"الحساب المتبقي: {money_signed(after)}",
         "شكرا على تعاملك",
-    ])
+    ] + seller_lines())
 
 
 def build_statement_text(c):
@@ -1980,7 +2083,7 @@ def build_statement_text(c):
         f"المطلوب منك {money_signed(c.get('balance', 0))}",
         "يرجى السداد في اقرب وقت",
         str(datetime.now().year),
-    ])
+    ] + seller_lines())
 
 
 def open_whatsapp(phone, message):
@@ -2079,7 +2182,7 @@ def render_document(c, inv, mode, number=0):
     W = 900
     L, R = 50, W - 50
     rows_n = len(inv.get("items", [])) if inv else min(len(c.get("invoices", [])), 20)
-    H = 1100 + rows_n * 110
+    H = 1350 + rows_n * 110
     img = PImage.new("RGB", (W, H), (255, 255, 255))
     d = ImageDraw.Draw(img)
 
@@ -2225,6 +2328,18 @@ def render_document(c, inv, mode, number=0):
         ct(W / 2, y, "يرجى السداد في أقرب وقت", f_sm, GRAY)
         y += 50
 
+    _shop, _sphone = SELLER.get("shop", ""), SELLER.get("phone", "")
+    if _shop or _sphone:
+        y += 14
+        d.line([L, y, R, y], fill=LINE, width=2)
+        y += 22
+        if _shop:
+            ct(W / 2, y, fit(_shop, f_mid, W - 100), f_mid, DARK)
+            y += 58
+        if _sphone:
+            ct(W / 2, y, "للتواصل: " + _sphone, f_sm, GRAY)
+            y += 48
+        y += 6
     ct(W / 2, y + 10, str(dt.year), f_xs, GRAY)
     y += 70
     img = img.crop((0, 0, W, min(y, H)))
@@ -2444,6 +2559,13 @@ class LoginScreen(Screen):
                        size_hint=(1, 1), pos_hint={"x": 0, "y": 0.35})
         st.disabled = True
         head.add_widget(st)
+        if getattr(self.app, "_adding", False):
+            cb = mk_btn("إلغاء", size_hint=(None, None),
+                        size=(dp(76), dp(38)), font_size=dp(14),
+                        background_color=GLASS,
+                        pos_hint={"x": 0.03, "top": 0.95})
+            cb.bind(on_release=lambda *a: self.app.cancel_add_account())
+            head.add_widget(cb)
         root.add_widget(head)
 
         body = BoxLayout(orientation="vertical", spacing=dp(10),
@@ -2509,7 +2631,14 @@ class RegisterScreen(Screen):
     def __init__(self, app, **kwargs):
         super().__init__(**kwargs)
         self.app = app
+        self.agreed = False
         self.build_ui()
+
+    def _field(self, body, label, hint, **kw):
+        body.add_widget(mk_text(label, dp(13), MUTED, height=dp(22)))
+        w = mk_input(hint_text=hint, size_hint_y=None, height=dp(50), **kw)
+        body.add_widget(w)
+        return w
 
     def build_ui(self):
         root = BoxLayout(orientation="vertical", spacing=0)
@@ -2523,53 +2652,70 @@ class RegisterScreen(Screen):
                          size_hint_y=None)
         body.bind(minimum_height=body.setter("height"))
 
-        body.add_widget(mk_text("الاسم الرباعي", dp(13), MUTED, height=dp(22)))
-        self.name_in = mk_input(hint_text="الاسم الكامل",
-                                size_hint_y=None, height=dp(50))
-        body.add_widget(self.name_in)
+        self.name_in = self._field(body, "الاسم الرباعي", "الاسم الكامل (أربعة أسماء)")
+        self.shop_in = self._field(body, "اسم المشروع أو اسم الدكان", "مثال: بقالة النور")
+        self.loc_in = self._field(body, "موقع الدكان (المنطقة)", "المنطقة التي يوجد فيها الدكان")
+        self.phone_in = self._field(body, "رقم التاجر", "77xxxxxxx", input_filter="int")
+        self.email_in = self._field(body, "البريد الإلكتروني (Gmail)", "example@gmail.com")
+        self.pass_in = self._field(body, "كلمة المرور", "********")
+        self.confirm_in = self._field(body, "تأكيد كلمة المرور", "********")
 
-        body.add_widget(mk_text("البريد الإلكتروني", dp(13), MUTED,
-                                height=dp(22)))
-        self.email_in = mk_input(hint_text="example@mail.com",
-                                 size_hint_y=None, height=dp(50))
-        body.add_widget(self.email_in)
-
-        body.add_widget(mk_text("كلمة المرور", dp(13), MUTED, height=dp(22)))
-        self.pass_in = mk_input(hint_text="********",
-                                size_hint_y=None, height=dp(50))
-        body.add_widget(self.pass_in)
-
-        body.add_widget(mk_text("تأكيد كلمة المرور", dp(13), MUTED,
-                                height=dp(22)))
-        self.confirm_in = mk_input(hint_text="********",
-                                   size_hint_y=None, height=dp(50))
-        body.add_widget(self.confirm_in)
+        # ---- الموافقة على شروط الاستخدام ----
+        body.add_widget(Widget(size_hint_y=None, height=dp(4)))
+        self.terms_btn = mk_btn("شروط الاستخدام (اضغط للقراءة والموافقة)",
+                                height=dp(48), font_size=dp(15),
+                                background_color=BLUE)
+        self.terms_btn.bind(on_release=lambda *a: self.app.open_terms())
+        body.add_widget(self.terms_btn)
+        self.terms_state = mk_text("لم تتم الموافقة على شروط الاستخدام بعد",
+                                   dp(12), RED, halign="center", height=dp(26))
+        body.add_widget(self.terms_state)
 
         self.msg_dt = mk_text("", dp(13), RED, halign="center", height=dp(28))
         body.add_widget(self.msg_dt)
 
-        body.add_widget(Widget(size_hint_y=None, height=dp(10)))
-
-        save_btn = mk_btn("تسجيل", height=dp(52), font_size=dp(18),
-                          background_color=GREEN)
-        save_btn.bind(on_release=self.do_register)
-        body.add_widget(save_btn)
+        self.save_btn = mk_btn("تسجيل", height=dp(52), font_size=dp(18),
+                               background_color=GRAY_BTN)
+        self.save_btn.disabled = True
+        self.save_btn.bind(on_release=self.do_register)
+        body.add_widget(self.save_btn)
 
         sv.add_widget(body)
         root.add_widget(sv)
         self.add_widget(root)
+        if self.agreed:
+            self.set_agreed()
+
+    def set_agreed(self):
+        self.agreed = True
+        self.save_btn.disabled = False
+        self.save_btn.set_bg(GREEN)
+        self.terms_state._color = tuple(GREEN)
+        self.terms_state.text = "تمت الموافقة على شروط الاستخدام"
 
     def do_register(self, *a):
         name = self.name_in.text.strip()
+        shop = self.shop_in.text.strip()
+        loc = self.loc_in.text.strip()
+        phone = self.phone_in.text.strip()
         email = self.email_in.text.strip().lower()
         password = self.pass_in.text.strip()
         confirm = self.confirm_in.text.strip()
 
-        if len(name.split()) < 2:
+        if len(name.split()) < 4:
             self.msg_dt.text = "الرجاء إدخال الاسم الرباعي كاملاً"
             return
-        if "@" not in email or "." not in email:
-            self.msg_dt.text = "البريد غير صالح"
+        if not shop:
+            self.msg_dt.text = "أدخل اسم المشروع أو الدكان"
+            return
+        if not loc:
+            self.msg_dt.text = "أدخل موقع الدكان"
+            return
+        if len(phone) < 7:
+            self.msg_dt.text = "أدخل رقم التاجر بشكل صحيح"
+            return
+        if not re.fullmatch(r"[a-z0-9._+\-]+@gmail\.com", email):
+            self.msg_dt.text = "يجب أن يكون البريد من نوع @gmail.com"
             return
         if len(password) < 4:
             self.msg_dt.text = "كلمة المرور قصيرة جداً"
@@ -2577,22 +2723,92 @@ class RegisterScreen(Screen):
         if password != confirm:
             self.msg_dt.text = "كلمتا المرور غير متطابقتين"
             return
+        if not self.agreed:
+            self.msg_dt.text = "يجب الموافقة على شروط الاستخدام"
+            return
 
         self.msg_dt.text = "جاري التسجيل..."
 
         def worker():
-            ok, msg = self.app.do_register(name, email, password)
+            ok, msg = self.app.do_register(name, email, password,
+                                           shop, loc, phone)
             Clock.schedule_once(
-                lambda dt: self._on_result(ok, msg, email, name), 0)
+                lambda dt: self._on_result(ok, msg, email, name,
+                                           shop, loc, phone), 0)
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_result(self, ok, msg, email, name):
+    def _on_result(self, ok, msg, email, name, shop, loc, phone):
         if ok:
             self.msg_dt.text = ""
-            self.app.on_register_success(email, name)
+            self.app.on_register_success(email, name, shop, loc, phone)
         else:
             self.msg_dt.text = msg or "فشل التسجيل"
+
+
+class TermsScreen(Screen):
+    """صفحة شروط الاستخدام الكاملة. زر \"أوافق\" يتفعّل عند الوصول للنهاية."""
+
+    def __init__(self, app, **kwargs):
+        super().__init__(**kwargs)
+        self.app = app
+        self.can_agree = False
+        self.build_ui()
+
+    @staticmethod
+    def _wrap(text, width=34):
+        out = []
+        for para in text.strip().split("\n"):
+            para = para.strip()
+            if not para:
+                out.append("")
+                continue
+            out.extend(textwrap.wrap(para, width=width) or [""])
+        return out
+
+    def build_ui(self):
+        root = BoxLayout(orientation="vertical", spacing=0)
+        root.add_widget(make_header("شروط الاستخدام", HEADER,
+                                    on_back=lambda *a: self.app.terms_back()))
+        self.scroll = ScrollView(size_hint=(1, 1), bar_width=dp(4))
+        self.lay = GridLayout(cols=1, spacing=dp(2), size_hint_y=None,
+                              padding=[dp(14), dp(12), dp(14), dp(16)])
+        self.lay.bind(minimum_height=self.lay.setter("height"))
+        for line in self._wrap(TERMS_TEXT):
+            if line:
+                self.lay.add_widget(mk_text(line, dp(15), TEXT, height=dp(28)))
+            else:
+                self.lay.add_widget(Widget(size_hint_y=None, height=dp(12)))
+        self.scroll.add_widget(self.lay)
+        root.add_widget(self.scroll)
+
+        bar = BoxLayout(orientation="vertical", size_hint_y=None,
+                        height=dp(96), padding=[dp(14), dp(6), dp(14), dp(10)],
+                        spacing=dp(4))
+        self.hint = mk_text("اقرأ الشروط حتى النهاية لتفعيل زر الموافقة",
+                            dp(12), MUTED, halign="center", height=dp(22))
+        bar.add_widget(self.hint)
+        self.agree_btn = mk_btn("أوافق", height=dp(52), font_size=dp(18),
+                                background_color=GRAY_BTN)
+        self.agree_btn.disabled = True
+        self.agree_btn.bind(on_release=lambda *a: self.app.terms_agreed())
+        bar.add_widget(self.agree_btn)
+        root.add_widget(bar)
+        self.add_widget(root)
+
+        self.scroll.bind(scroll_y=self._check, height=self._check)
+        self.lay.bind(height=self._check)
+        Clock.schedule_once(self._check, 0.5)
+
+    def _check(self, *a):
+        if self.can_agree:
+            return
+        if (self.lay.height <= self.scroll.height + dp(6)
+                or self.scroll.scroll_y <= 0.03):
+            self.can_agree = True
+            self.agree_btn.disabled = False
+            self.agree_btn.set_bg(GREEN)
+            self.hint.text = "يمكنك الآن الموافقة"
 
 
 # ============================================================
@@ -3254,45 +3470,49 @@ class SettingsScreen(Screen):
         root = BoxLayout(orientation="vertical", spacing=0)
         root.add_widget(make_header("الإعدادات", HEADER,
                                     on_back=lambda *a: self.app.go_main()))
-        body = make_body(padding=[dp(14), dp(12), dp(14), dp(14)],
-                         spacing=dp(10))
+        sv = ScrollView(size_hint=(1, 1), bar_width=dp(3))
+        body = BoxLayout(orientation="vertical", spacing=dp(10),
+                         padding=[dp(14), dp(12), dp(14), dp(14)],
+                         size_hint_y=None)
+        body.bind(minimum_height=body.setter("height"))
 
         user = self.app.data.get("user") or {}
         card = CardBox(orientation="vertical", size_hint_y=None,
-                       height=dp(170), padding=[dp(14), dp(10)],
+                       height=dp(310), padding=[dp(14), dp(10)],
                        spacing=dp(2))
         card.add_widget(mk_text("معلومات الحساب", dp(16), PRIMARY,
                                 height=dp(32)))
-        card.add_widget(mk_text("الاسم", dp(12), MUTED, height=dp(20)))
-        card.add_widget(mk_text(user.get("name", ""), dp(16), TEXT,
-                                height=dp(28)))
-        card.add_widget(mk_text("البريد الإلكتروني", dp(12), MUTED,
-                                height=dp(20)))
-        card.add_widget(mk_text(user.get("email", ""), dp(15), TEXT,
-                                height=dp(28)))
+        for label, key in (("الاسم", "name"),
+                           ("اسم المشروع / الدكان", "shop"),
+                           ("موقع الدكان", "loc"),
+                           ("رقم التاجر", "phone"),
+                           ("البريد الإلكتروني", "email")):
+            card.add_widget(mk_text(label, dp(12), MUTED, height=dp(20)))
+            card.add_widget(mk_text(user.get(key, "") or "-", dp(15), TEXT,
+                                    height=dp(28)))
         body.add_widget(card)
 
-        theme_btn = mk_btn("الوضع النهاري" if is_dark() else "الوضع الليلي",
-                           height=dp(50), font_size=dp(16),
-                           background_color=BLUE)
-        theme_btn.bind(on_release=self.app.toggle_theme)
-        body.add_widget(theme_btn)
+        def add_btn(text, color, cb):
+            b = mk_btn(text, height=dp(50), font_size=dp(16),
+                       background_color=color)
+            b.bind(on_release=cb)
+            body.add_widget(b)
 
-        logout_btn = mk_btn("تسجيل الخروج", height=dp(50), font_size=dp(16),
-                            background_color=GRAY_BTN)
-        logout_btn.bind(on_release=self.confirm_logout)
-        body.add_widget(logout_btn)
-
-        del_btn = mk_btn("حذف الحساب", height=dp(50), font_size=dp(16),
-                         background_color=RED)
-        del_btn.bind(on_release=self.confirm_delete_account)
-        body.add_widget(del_btn)
+        add_btn("تعديل بيانات البائع", BLUE, self.app.open_edit_profile)
+        add_btn("تغيير كلمة المرور", BLUE, self.app.open_change_password)
+        add_btn("الأجهزة المتصلة بالحساب", BLUE, self.app.open_devices)
+        add_btn("الحسابات (تبديل / إضافة)", BLUE, self.app.open_accounts)
+        add_btn("تغيير الخط", BLUE, self.app.open_fonts)
+        add_btn("الوضع النهاري" if is_dark() else "الوضع الليلي", ORANGE,
+                self.app.toggle_theme)
+        add_btn("تسجيل الخروج", GRAY_BTN, self.confirm_logout)
+        add_btn("حذف الحساب", RED, self.confirm_delete_account)
 
         body.add_widget(mk_text("تسجيل الخروج يُبقي بياناتك محفوظة على الجهاز "
                                 "وعلى الانترنت اذا عملت مزامنه. حذف الحساب يمسح كل شيء نهائياً.",
                                 dp(12), MUTED, halign="center", height=dp(48)))
-        body.add_widget(Widget())
-        root.add_widget(body)
+        sv.add_widget(body)
+        root.add_widget(sv)
         self.add_widget(root)
 
     # ---------- تسجيل الخروج ----------
@@ -3377,6 +3597,344 @@ class SettingsScreen(Screen):
         popup.open()
 
 
+
+# ============================================================
+# 23-ب) شاشات الإعدادات الفرعية
+# ============================================================
+ACC_KEYS = ("user", "clients", "_deleted", "_tg_meta", "_sv", "_dev_ok", "owner")
+
+
+class FormScreen(Screen):
+    TITLE = ""
+    SAVE_TEXT = "حفظ"
+    _busy = False
+
+    def __init__(self, app, **kwargs):
+        super().__init__(**kwargs)
+        self.app = app
+        self.build_ui()
+
+    def fields(self, body):
+        pass
+
+    def labeled(self, body, label, hint="", text="", **kw):
+        body.add_widget(mk_text(label, dp(13), MUTED, height=dp(22)))
+        w = mk_input(hint_text=hint, size_hint_y=None, height=dp(50), **kw)
+        if text:
+            w.text = text
+        body.add_widget(w)
+        return w
+
+    def build_ui(self):
+        root = BoxLayout(orientation="vertical", spacing=0)
+        root.add_widget(make_header(
+            self.TITLE, HEADER,
+            on_back=lambda *a: self.app.open_settings(back=True)))
+        sv = ScrollView(size_hint=(1, 1))
+        body = BoxLayout(orientation="vertical", spacing=dp(8),
+                         padding=[dp(24), dp(16), dp(24), dp(20)],
+                         size_hint_y=None)
+        body.bind(minimum_height=body.setter("height"))
+        self.fields(body)
+        self.msg_dt = mk_text("", dp(13), RED, halign="center", height=dp(28))
+        body.add_widget(self.msg_dt)
+        btn = mk_btn(self.SAVE_TEXT, height=dp(52), font_size=dp(18),
+                     background_color=GREEN)
+        btn.bind(on_release=self.on_save)
+        body.add_widget(btn)
+        sv.add_widget(body)
+        root.add_widget(sv)
+        self.add_widget(root)
+
+    def on_save(self, *a):
+        pass
+
+    def run(self, work, on_ok):
+        if self._busy:
+            return
+        self._busy = True
+        self.msg_dt.text = "جاري الحفظ..."
+
+        def w():
+            try:
+                ok, res = work()
+            except TgError as e:
+                ok, res = False, str(e)
+            except Exception as e:
+                ok, res = False, str(e)[:60]
+            Clock.schedule_once(lambda dt: self._done(ok, res, on_ok), 0)
+
+        threading.Thread(target=w, daemon=True).start()
+
+    def _done(self, ok, res, on_ok):
+        self._busy = False
+        if ok:
+            self.msg_dt.text = ""
+            on_ok()
+        else:
+            self.msg_dt.text = res or "فشلت العملية"
+
+
+class ChangePasswordScreen(FormScreen):
+    TITLE = "تغيير كلمة المرور"
+
+    def fields(self, body):
+        self.old_in = self.labeled(body, "كلمة المرور الحالية", "********")
+        self.new_in = self.labeled(body, "كلمة المرور الجديدة", "********")
+        self.conf_in = self.labeled(body, "تأكيد كلمة المرور الجديدة", "********")
+        body.add_widget(mk_text(
+            "عند التغيير سيتم تسجيل الخروج من جميع الأجهزة الأخرى.",
+            dp(12), MUTED, halign="center", height=dp(26)))
+
+    def on_save(self, *a):
+        old = self.old_in.text.strip()
+        new = self.new_in.text.strip()
+        if not old:
+            self.msg_dt.text = "أدخل كلمة المرور الحالية"
+            return
+        if len(new) < 4:
+            self.msg_dt.text = "كلمة المرور الجديدة قصيرة جداً"
+            return
+        if new != self.conf_in.text.strip():
+            self.msg_dt.text = "كلمتا المرور غير متطابقتين"
+            return
+        self.run(lambda: self.app.change_password_remote(old, new),
+                 lambda: self.app.open_settings(back=True))
+
+
+class EditProfileScreen(FormScreen):
+    TITLE = "تعديل بيانات البائع"
+
+    def fields(self, body):
+        u = self.app.data.get("user") or {}
+        self.name_in = self.labeled(body, "الاسم", "", u.get("name", ""))
+        self.shop_in = self.labeled(body, "اسم المشروع / الدكان", "", u.get("shop", ""))
+        self.loc_in = self.labeled(body, "موقع الدكان", "", u.get("loc", ""))
+        self.phone_in = self.labeled(body, "رقم التاجر", "", u.get("phone", ""),
+                                     input_filter="int")
+
+    def on_save(self, *a):
+        name = self.name_in.text.strip()
+        shop = self.shop_in.text.strip()
+        loc = self.loc_in.text.strip()
+        phone = self.phone_in.text.strip()
+        if len(name.split()) < 2:
+            self.msg_dt.text = "أدخل الاسم كاملاً"
+            return
+        if not shop or not loc:
+            self.msg_dt.text = "أدخل اسم المشروع والموقع"
+            return
+        if len(phone) < 7:
+            self.msg_dt.text = "أدخل رقم التاجر بشكل صحيح"
+            return
+        self.run(lambda: self.app.update_profile_remote(name, shop, loc, phone),
+                 lambda: self.app.open_settings(back=True))
+
+
+class DevicesScreen(Screen):
+    def __init__(self, app, **kwargs):
+        super().__init__(**kwargs)
+        self.app = app
+        self.build_ui()
+        self.load()
+
+    def build_ui(self):
+        root = BoxLayout(orientation="vertical", spacing=0)
+        root.add_widget(make_header(
+            "الأجهزة المتصلة", HEADER,
+            on_back=lambda *a: self.app.open_settings(back=True)))
+        body = make_body(padding=[dp(12), dp(10), dp(12), dp(10)])
+        self.status = mk_text("جاري التحميل...", dp(13), MUTED,
+                              halign="center", height=dp(30))
+        body.add_widget(self.status)
+        scroll, self.list_layout = make_scroll_list(spacing=dp(8))
+        body.add_widget(scroll)
+        root.add_widget(body)
+        self.add_widget(root)
+
+    def load(self):
+        self.status.text = "جاري التحميل..."
+
+        def w():
+            try:
+                email = (self.app.data.get("user") or {}).get("email", "")
+                rec, _m = DB.get_user(email)
+                devs = (rec or {}).get("dev") or {}
+                Clock.schedule_once(lambda dt: self.show(devs), 0)
+            except Exception as e:
+                msg = str(e)[:60]
+                Clock.schedule_once(lambda dt: self.fail(msg), 0)
+
+        threading.Thread(target=w, daemon=True).start()
+
+    def fail(self, msg):
+        self.status.text = msg or "تعذر تحميل الأجهزة (تحقق من الانترنت)"
+
+    def show(self, devs):
+        self.list_layout.clear_widgets()
+        me = self.app.data.get("device_id")
+        if not devs:
+            self.status.text = "لا توجد أجهزة مسجلة، اضغط مزامنة أولاً"
+            return
+        self.status.text = f"عدد الأجهزة: {len(devs)}"
+        items = sorted(devs.items(), key=lambda kv: (kv[1] or {}).get("t", ""),
+                       reverse=True)
+        for did, info in items:
+            info = info or {}
+            row = CardBox(orientation="horizontal", size_hint_y=None,
+                          height=dp(74), padding=[dp(12), dp(8)],
+                          spacing=dp(8))
+            if did != me:
+                kb = mk_btn("طرد", size_hint=(None, None),
+                            size=(dp(64), dp(38)), font_size=dp(14),
+                            background_color=RED,
+                            pos_hint={"center_y": 0.5})
+                kb.bind(on_release=lambda w, d=did, n=info.get("n", "جهاز"):
+                        self.confirm_kick(d, n))
+                row.add_widget(kb)
+            box = BoxLayout(orientation="vertical")
+            nm = info.get("n", "جهاز") + ("  (هذا الجهاز)" if did == me else "")
+            box.add_widget(mk_text(nm, dp(15), TEXT, hint_y=0.55))
+            box.add_widget(mk_text("آخر مزامنة: " + str(info.get("t", ""))[:16],
+                                   dp(12), MUTED, hint_y=0.45))
+            row.add_widget(box)
+            self.list_layout.add_widget(row)
+
+    def confirm_kick(self, did, name):
+        content = BoxLayout(orientation="vertical", spacing=dp(10),
+                            padding=dp(12))
+        content.add_widget(mk_text(f"طرد الجهاز ({name}) من الحساب؟",
+                                   dp(15), TEXT, halign="center",
+                                   height=dp(44)))
+        content.add_widget(mk_text(
+            "سيتم تسجيل خروجه عند أول مزامنة. لقفل الحساب عنه نهائياً غيّر كلمة المرور.",
+            dp(12), MUTED, halign="center", height=dp(48)))
+        content.add_widget(Widget())
+        bb = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
+        yes = mk_btn("طرد", background_color=RED)
+        no = mk_btn("إلغاء", background_color=GRAY_BTN)
+        bb.add_widget(yes)
+        bb.add_widget(no)
+        content.add_widget(bb)
+        popup = make_arabic_popup("طرد جهاز", content, size_hint=(0.9, 0.46),
+                                  title_color=RED, separator_color=RED)
+
+        def do(*a):
+            popup.dismiss()
+            self.status.text = "جاري الطرد..."
+
+            def w():
+                try:
+                    ok, err = self.app.kick_device_remote(did)
+                except Exception as e:
+                    ok, err = False, str(e)[:60]
+                Clock.schedule_once(
+                    lambda dt: (self.load() if ok else self.fail(err)), 0)
+
+            threading.Thread(target=w, daemon=True).start()
+
+        yes.bind(on_release=do)
+        no.bind(on_release=lambda *a: popup.dismiss())
+        popup.open()
+
+
+class FontScreen(Screen):
+    def __init__(self, app, **kwargs):
+        super().__init__(**kwargs)
+        self.app = app
+        self.build_ui()
+
+    def build_ui(self):
+        root = BoxLayout(orientation="vertical", spacing=0)
+        root.add_widget(make_header(
+            "تغيير الخط", HEADER,
+            on_back=lambda *a: self.app.open_settings(back=True)))
+        body = make_body(padding=[dp(12), dp(10), dp(12), dp(10)])
+        scroll, lay = make_scroll_list(spacing=dp(8))
+        cur = self.app.data.get("font") or "font.otf"
+        n = 0
+        for i, fn in enumerate(FONT_FILES):
+            info = USER_FONTS.get(fn)
+            if not info:
+                continue
+            n += 1
+            sel = (fn == cur)
+            row = CardBox(orientation="vertical", size_hint_y=None,
+                          height=dp(84), padding=[dp(12), dp(6)],
+                          bg=(SOFT_BLUE if sel else None),
+                          on_tap=lambda f=fn: self.pick(f))
+            sample = DrawnText(text="دفتر ديون الزهوب", font_size=dp(22),
+                               color=TEXT, halign="center",
+                               size_hint_y=0.62, font_override=info[0])
+            sample.disabled = True
+            row.add_widget(sample)
+            label = f"خط {i + 1}" + ("  -  المستخدم حالياً" if sel else "")
+            row.add_widget(mk_text(label, dp(12), PRIMARY if sel else MUTED,
+                                   halign="center", hint_y=0.38))
+            lay.add_widget(row)
+        if n == 0:
+            lay.add_widget(mk_text("لم يتم العثور على ملفات الخطوط داخل التطبيق",
+                                   dp(14), RED, halign="center",
+                                   height=dp(40)))
+        body.add_widget(scroll)
+        root.add_widget(body)
+        self.add_widget(root)
+
+    def pick(self, fn):
+        self.app.set_font(fn)
+        self.clear_widgets()
+        self.build_ui()
+        schedule_refresh(0.05)
+
+
+class AccountsScreen(Screen):
+    def __init__(self, app, **kwargs):
+        super().__init__(**kwargs)
+        self.app = app
+        self.build_ui()
+
+    def _acc_card(self, user, tag, on_switch=None):
+        row = CardBox(orientation="horizontal", size_hint_y=None,
+                      height=dp(84), padding=[dp(12), dp(8)], spacing=dp(8))
+        if on_switch:
+            sb = mk_btn("تبديل", size_hint=(None, None),
+                        size=(dp(70), dp(38)), font_size=dp(14),
+                        background_color=GREEN, pos_hint={"center_y": 0.5})
+            sb.bind(on_release=lambda *a: on_switch())
+            row.add_widget(sb)
+        box = BoxLayout(orientation="vertical")
+        title = (user.get("shop") or user.get("name") or user.get("email", ""))
+        box.add_widget(mk_text(title + tag, dp(15), TEXT, hint_y=0.4))
+        box.add_widget(mk_text(user.get("name", ""), dp(12), MUTED, hint_y=0.3))
+        box.add_widget(mk_text(user.get("email", ""), dp(12), MUTED, hint_y=0.3))
+        row.add_widget(box)
+        return row
+
+    def build_ui(self):
+        root = BoxLayout(orientation="vertical", spacing=0)
+        root.add_widget(make_header(
+            "الحسابات", HEADER,
+            on_back=lambda *a: self.app.open_settings(back=True)))
+        body = make_body(padding=[dp(12), dp(10), dp(12), dp(10)])
+        scroll, lay = make_scroll_list(spacing=dp(8))
+        cur = self.app.data.get("user") or {}
+        lay.add_widget(self._acc_card(cur, "  (الحالي)"))
+        for email, st in (self.app.data.get("accounts") or {}).items():
+            u = (st or {}).get("user") or {"email": email}
+            lay.add_widget(self._acc_card(
+                u, "", on_switch=lambda e=email: self.app.switch_account(e)))
+        body.add_widget(scroll)
+        body.add_widget(mk_text(
+            "التبديل بين الحسابات يعمل بدون انترنت. اضغط مزامنة بعد التبديل لرفع التغييرات.",
+            dp(12), MUTED, halign="center", height=dp(40)))
+        add = mk_btn("إضافة حساب آخر", height=dp(50), font_size=dp(16),
+                     background_color=BLUE)
+        add.bind(on_release=lambda *a: self.app.begin_add_account())
+        body.add_widget(add)
+        root.add_widget(body)
+        self.add_widget(root)
+
+
 # ============================================================
 # 24) التطبيق
 # ============================================================
@@ -3384,6 +3942,16 @@ class DebtBookApp(App):
     def build(self):
         self.title = "دفتر ديون الزهوب"
         self.data = load_data()
+        self._adding = False
+        if not self.data.get("device_id"):
+            self.data["device_id"] = gen_id()
+        # الخط: font.otf أول مرة، وبعدها الخط الذي اختاره المستخدم
+        if not self.data.get("font"):
+            self.data["font"] = "font.otf"
+        if not set_app_font(self.data["font"]):
+            set_app_font("font.otf")
+        set_seller(self.data.get("user"))
+        save_data(self.data)
         apply_theme(self.data.get("theme", "light"))
         Window.clearcolor = BG
         try:
@@ -3422,9 +3990,15 @@ class DebtBookApp(App):
     # ==========================================================
     # تسجيل / دخول (يعمل من أي جهاز، بدون getUpdates)
     # ==========================================================
-    def do_register(self, name, email, password):
+    def _dev_id(self):
+        if not self.data.get("device_id"):
+            self.data["device_id"] = gen_id()
+        return self.data["device_id"]
+
+    def do_register(self, name, email, password, shop="", loc="", phone=""):
         try:
-            rec, mid = DB.create_user(email, name, password)
+            rec, mid = DB.create_user(email, name, password, shop, loc, phone,
+                                      self._dev_id(), get_device_name())
             self.data.setdefault("_tg_meta", {})["users_message_id"] = mid
             return True, "OK"
         except TgError as e:
@@ -3439,6 +4013,11 @@ class DebtBookApp(App):
                 return False, "البريد غير مسجل"
             if not DB.check_password(rec, password):
                 return False, "كلمة المرور خاطئة"
+            devs = dict(rec.get("dev") or {})
+            devs[self._dev_id()] = {"n": get_device_name(), "t": now_full()}
+            rec["dev"] = devs
+            rec.setdefault("sv", 1)
+            mid = DB.save_user(rec, mid)
             server, _texts = DB.read_clients(rec)
             return True, {"rec": rec, "mid": mid, "server": server}
         except TgError as e:
@@ -3455,17 +4034,75 @@ class DebtBookApp(App):
             self.data["_tg_meta"] = {}
         self.data["owner"] = email
 
-    def on_register_success(self, email, name):
+    # ---------- تعدد الحسابات على الجهاز ----------
+    def stash_current(self):
+        email = (self.data.get("user") or {}).get("email")
+        if not email:
+            return
+        self.data.setdefault("accounts", {})[email] = {
+            k: self.data.get(k) for k in ACC_KEYS}
+
+    def _load_account_state(self, st):
+        defaults = {"clients": [], "_deleted": [], "_tg_meta": {}}
+        for k in ACC_KEYS:
+            v = (st or {}).get(k)
+            self.data[k] = v if v is not None else defaults.get(k)
+
+    def _prepare_account_switch(self, email):
+        cur = (self.data.get("user") or {}).get("email")
+        if self._adding and cur and cur != email:
+            self.stash_current()
+            accs = self.data.setdefault("accounts", {})
+            if email in accs:
+                self._load_account_state(accs.pop(email))
+            else:
+                self._load_account_state({})
+        self._adding = False
+
+    def switch_account(self, email):
+        accs = self.data.setdefault("accounts", {})
+        if email not in accs:
+            return
+        self.stash_current()
+        self._load_account_state(accs.pop(email))
+        set_seller(self.data.get("user"))
+        self.save()
+        self._build_main_and_show()
+
+    def begin_add_account(self):
+        self._adding = True
+        self.go_login()
+
+    def cancel_add_account(self):
+        self._adding = False
+        self.go_main()
+
+    @staticmethod
+    def _user_from_rec(rec):
+        return {"email": rec.get("email", ""), "name": rec.get("name", ""),
+                "shop": rec.get("shop", ""), "loc": rec.get("loc", ""),
+                "phone": rec.get("phone", "")}
+
+    def on_register_success(self, email, name, shop="", loc="", phone=""):
+        self._prepare_account_switch(email)
         self._claim_device(email)
-        self.data["user"] = {"email": email, "name": name}
+        self.data["user"] = {"email": email, "name": name, "shop": shop,
+                             "loc": loc, "phone": phone}
+        self.data["_sv"] = 1
+        self.data["_dev_ok"] = True
+        set_seller(self.data["user"])
         self.save()
         self._build_main_and_show()
 
     def on_login_success(self, info):
         rec = info["rec"]
         email = rec.get("email", "")
+        self._prepare_account_switch(email)
         self._claim_device(email)
-        self.data["user"] = {"email": email, "name": rec.get("name", "")}
+        self.data["user"] = self._user_from_rec(rec)
+        self.data["_sv"] = rec.get("sv", 1)
+        self.data["_dev_ok"] = True
+        set_seller(self.data["user"])
         meta = self.data.setdefault("_tg_meta", {})
         meta["users_message_id"] = info["mid"]
         try:
@@ -3507,6 +4144,19 @@ class DebtBookApp(App):
                     status("الحساب غير موجود على الانترنت",
                            "ربما حُذف من جهاز آخر")
                     return
+                err = self._session_error(rec)
+                if err:
+                    status("تم إنهاء الجلسة", err.replace("\n", " - "))
+                    Clock.schedule_once(lambda dt: self.force_logout(err), 2.5)
+                    return
+                devs = dict(rec.get("dev") or {})
+                devs[self._dev_id()] = {"n": get_device_name(), "t": now_full()}
+                rec["dev"] = devs
+                rec.setdefault("sv", 1)
+                mid = DB.save_user(rec, mid)
+                self.data["_dev_ok"] = True
+                self.data["_sv"] = rec["sv"]
+                self._apply_profile(rec)
                 server, texts = DB.read_clients(rec)
 
                 status("جاري الدمج...")
@@ -3542,6 +4192,103 @@ class DebtBookApp(App):
 
     def _after_sync(self):
         self._build_main_and_show()
+
+    # ==========================================================
+    # الجلسات والأجهزة وبيانات البائع
+    # ==========================================================
+    def _session_error(self, rec):
+        """يرجع نص الخطأ لو يجب إخراج هذا الجهاز، وإلا None."""
+        try:
+            sv = int(rec.get("sv", 1) or 1)
+        except Exception:
+            sv = 1
+        local = self.data.get("_sv")
+        if local is not None and sv != local:
+            return ("لا يمكنك المزامنة\nتم تغيير كلمة المرور من الجهاز (%s)"
+                    % (rec.get("pwdev") or "جهاز آخر"))
+        devs = rec.get("dev")
+        if (self.data.get("_dev_ok") and isinstance(devs, dict)
+                and self._dev_id() not in devs):
+            return "تم إخراج هذا الجهاز من الحساب\nسجّل الدخول من جديد"
+        return None
+
+    def _apply_profile(self, rec):
+        u = dict(self.data.get("user") or {})
+        new = self._user_from_rec(rec)
+        new["email"] = u.get("email") or new["email"]
+        if new != u:
+            self.data["user"] = new
+            set_seller(new)
+            return True
+        set_seller(u)
+        return False
+
+    def force_logout(self, msg):
+        self.do_logout()
+        try:
+            scr = self.sm.get_screen("login")
+            scr.msg_dt.height = dp(70)
+            scr.msg_dt.text = msg
+        except Exception as e:
+            print(f"[FORCE LOGOUT] {e}")
+
+    def _fresh_rec(self):
+        """(ينفَّذ في خيط) يرجع (rec, mid, error)."""
+        email = (self.data.get("user") or {}).get("email", "")
+        rec, mid = DB.get_user(email)
+        if not rec:
+            return None, None, "الحساب غير موجود على الانترنت"
+        err = self._session_error(rec)
+        if err:
+            return None, None, err.replace("\n", " - ")
+        return rec, mid, None
+
+    def change_password_remote(self, old, new):
+        rec, mid, err = self._fresh_rec()
+        if err:
+            return False, err
+        if not DB.check_password(rec, old):
+            return False, "كلمة المرور الحالية خاطئة"
+        me = self._dev_id()
+        rec["pw"] = hash_password(new)
+        rec.pop("password", None)
+        rec["sv"] = int(rec.get("sv", 1) or 1) + 1
+        rec["pwdev"] = get_device_name()
+        rec["dev"] = {me: {"n": get_device_name(), "t": now_full()}}
+        DB.save_user(rec, mid)
+        self.data["_sv"] = rec["sv"]
+        self.data["_dev_ok"] = True
+        self.save()
+        return True, ""
+
+    def update_profile_remote(self, name, shop, loc, phone):
+        rec, mid, err = self._fresh_rec()
+        if err:
+            return False, err
+        rec["name"], rec["shop"], rec["loc"], rec["phone"] = name, shop, loc, phone
+        DB.save_user(rec, mid)
+        u = dict(self.data.get("user") or {})
+        u.update({"name": name, "shop": shop, "loc": loc, "phone": phone})
+        self.data["user"] = u
+        set_seller(u)
+        self.save()
+        return True, ""
+
+    def kick_device_remote(self, dev_id):
+        rec, mid, err = self._fresh_rec()
+        if err:
+            return False, err
+        devs = dict(rec.get("dev") or {})
+        devs.pop(dev_id, None)
+        rec["dev"] = devs
+        DB.save_user(rec, mid)
+        return True, ""
+
+    def set_font(self, fn):
+        if set_app_font(fn):
+            self.data["font"] = fn
+            self.save()
+            refresh_all_texts()
 
     # ==========================================================
     # الشاشة الرئيسية
@@ -3632,8 +4379,50 @@ class DebtBookApp(App):
     # ==========================================================
     # الإعدادات / الثيم / الخروج / حذف الحساب
     # ==========================================================
-    def open_settings(self, *a):
-        self._show(SettingsScreen(self), "left")
+    def open_settings(self, *a, back=False):
+        self._show(SettingsScreen(self), "right" if back else "left")
+
+    def open_edit_profile(self, *a):
+        self._show(EditProfileScreen(self), "left")
+
+    def open_change_password(self, *a):
+        self._show(ChangePasswordScreen(self), "left")
+
+    def open_devices(self, *a):
+        self._show(DevicesScreen(self), "left")
+
+    def open_accounts(self, *a):
+        self._show(AccountsScreen(self), "left")
+
+    def open_fonts(self, *a):
+        self._show(FontScreen(self), "left")
+
+    def open_terms(self):
+        for s in list(self.sm.screens):
+            if s.name == "terms":
+                self.sm.remove_widget(s)
+        ts = TermsScreen(self, name="terms")
+        self.sm.transition.direction = "left"
+        self.sm.add_widget(ts)
+        self.sm.current = "terms"
+
+    def terms_back(self):
+        self._back_to_register(False)
+
+    def terms_agreed(self):
+        self._back_to_register(True)
+
+    def _back_to_register(self, agreed):
+        try:
+            reg = self.sm.get_screen("register")
+        except Exception:
+            self.go_register()
+            return
+        if agreed:
+            reg.set_agreed()
+        self.sm.transition.direction = "right"
+        self.sm.current = "register"
+        Clock.schedule_once(self._cleanup, 0.5)
 
     def toggle_theme(self, *a):
         new = "light" if is_dark() else "dark"
@@ -3665,6 +4454,7 @@ class DebtBookApp(App):
     def do_logout(self, *a):
         """يرجع لشاشة الدخول والبيانات تبقى على الجهاز."""
         self.data["user"] = None
+        set_seller({})
         self.save()
         for s in list(self.sm.screens):
             if s.name == "main":
@@ -3693,6 +4483,9 @@ class DebtBookApp(App):
 
     def wipe_local_and_restart(self):
         """يحذف data.json بالكامل ويرجع التطبيق كأنه أول مرة."""
+        keep = {k: self.data.get(k) for k in
+                ("accounts", "device_id", "font", "theme")
+                if self.data.get(k) is not None}
         for p in (DATA_FILE, DATA_FILE + ".tmp"):
             try:
                 if os.path.exists(p):
@@ -3706,7 +4499,10 @@ class DebtBookApp(App):
         except Exception:
             pass
         self.data = load_data()
-        apply_theme("light")
+        self.data.update(keep)
+        set_seller({})
+        self.save()
+        apply_theme(self.data.get("theme", "light"))
         Window.clearcolor = BG
         self.search_query = ""
         for s in list(self.sm.screens):
@@ -3728,6 +4524,9 @@ class DebtBookApp(App):
         Clock.schedule_once(self._cleanup, 0.5)
 
     def go_register(self):
+        for s in list(self.sm.screens):
+            if s.name in ("register", "terms"):
+                self.sm.remove_widget(s)
         rs = RegisterScreen(self, name="register")
         self.sm.transition.direction = "left"
         self.sm.add_widget(rs)
@@ -3790,9 +4589,23 @@ class DebtBookApp(App):
         cur = self.sm.current_screen
         if cur is None:
             return False
-        if cur.name in ("login", "register", "main"):
+        if cur.name == "terms":
+            self.terms_back()
+            return True
+        if cur.name == "register":
+            self.go_login()
+            return True
+        if cur.name == "login":
+            if self._adding:
+                self.cancel_add_account()
+                return True
             return False
-        if isinstance(cur, (ClientScreen, SyncScreen, SettingsScreen)):
+        if cur.name == "main":
+            return False
+        if isinstance(cur, (ChangePasswordScreen, EditProfileScreen,
+                            DevicesScreen, FontScreen, AccountsScreen)):
+            self.open_settings(back=True)
+        elif isinstance(cur, (ClientScreen, SyncScreen, SettingsScreen)):
             self.go_main()
         else:
             self.go_client(self._cur_client, back=True)
