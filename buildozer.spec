@@ -8,7 +8,7 @@ source.include_exts = py,png,jpg,jpeg,kv,atlas,ttf,otf,json
 
 version = 1.0.0
 icon.filename = icon.png
-
+presplash.filename = icon.png
 requirements = python3,kivy==2.3.1,pillow,requests
 
 orientation = portrait
