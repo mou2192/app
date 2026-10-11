@@ -48,6 +48,7 @@ jobs:
       - name: Clear incompatible native build cache
         run: |
           rm -rf .buildozer/android/platform/build-arm64-v8a
+          rm -rf .buildozer/android/platform/build-armeabi-v7a
           rm -rf .buildozer/android/platform/python-for-android
 
       - name: Build APK
