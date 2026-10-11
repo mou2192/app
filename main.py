@@ -46,9 +46,6 @@ def ensure_package(pip_name, import_name=None):
             pass
 
 
-ensure_package("kivy")
-ensure_package("pillow", "PIL")
-
 # ============================================================
 # 2) الاستيرادات
 # ============================================================
@@ -954,23 +951,35 @@ def _find_font_file(fn):
 
 for _i, _fn in enumerate(FONT_FILES):
     _fp = _find_font_file(_fn)
-    if not _fp:
-        continue
-    _nm = "UserFont%d" % _i
+    if _fp:
+        USER_FONTS[_fn] = ("UserFont%d" % _i, _fp)
+
+_REGISTERED_USER_FONTS = set()
+
+
+def _ensure_user_font(fn):
+    info = USER_FONTS.get(fn)
+    if not info:
+        return None
+    _nm, _fp = info
+    if fn in _REGISTERED_USER_FONTS:
+        return _nm
     try:
         LabelBase.register(name=_nm, fn_regular=_fp)
-        USER_FONTS[_fn] = (_nm, _fp)
+        _REGISTERED_USER_FONTS.add(fn)
+        return _nm
     except Exception as _e:
-        print(f"[FONT] user font {_fn}: {_e}")
+        print(f"[FONT] user font {_fp}: {_e}")
+        return None
 
 
 def set_app_font(fn):
     """يفعّل الخط fn لكل التطبيق (الشاشة + صور الفواتير). يرجع True لو نجح."""
     global FONT_NAME, FONT_PATH, FONT_REGISTERED
-    info = USER_FONTS.get(fn)
-    if not info:
+    _nm = _ensure_user_font(fn)
+    if not _nm:
         return False
-    FONT_NAME, FONT_PATH = info
+    FONT_NAME, FONT_PATH = _nm, USER_FONTS[fn][1]
     FONT_REGISTERED = True
     return True
 
@@ -3857,6 +3866,9 @@ class FontScreen(Screen):
             info = USER_FONTS.get(fn)
             if not info:
                 continue
+            font_name = _ensure_user_font(fn)
+            if not font_name:
+                continue
             n += 1
             sel = (fn == cur)
             row = CardBox(orientation="vertical", size_hint_y=None,
@@ -3865,7 +3877,7 @@ class FontScreen(Screen):
                           on_tap=lambda f=fn: self.pick(f))
             sample = DrawnText(text="دفتر ديون الزهوب", font_size=dp(22),
                                color=TEXT, halign="center",
-                               size_hint_y=0.62, font_override=info[0])
+                               size_hint_y=0.62, font_override=font_name)
             sample.disabled = True
             row.add_widget(sample)
             label = f"خط {i + 1}" + ("  -  المستخدم حالياً" if sel else "")
