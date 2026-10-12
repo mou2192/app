@@ -1,6 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-دفتر ديون الزهوب - الإصدار 1.0.0
+دفتر ديون الزهوب - الإصدار 16.0
+--------------------------------
++ تسجيل الدخول من أي جهاز: الفهرس رسالة مثبّتة تُقرأ بـ getChat،
+  وبيانات كل مستخدم تُقرأ بـ forwardMessage (لا نستخدم getUpdates للقراءة
+  فلا شيء يُفرَّغ من القناة أبداً).
++ بيانات العملاء مضغوطة ومقسّمة على عدة رسائل (لا حد 4096 حرف).
++ شاشة إعدادات: معلومات الحساب، الوضع الليلي، تسجيل الخروج، حذف الحساب.
++ جلسة واحدة: يبقى المستخدم مسجلاً حتى يخرج أو يحذف حسابه.
++ الفواتير والسندات وكشف الحساب كصورة PNG و PDF مع إرسال واتساب.
++ المزامنة تدعم الحذف (tombstones) وآخر تعديل (mod) بدل الضم الأعمى.
 """
 
 import os
@@ -28,6 +37,10 @@ from datetime import datetime
 def ensure_package(pip_name, import_name=None):
     if import_name is None:
         import_name = pip_name
+    # [إصلاح كراش] على أندرويد لا يوجد pip ولا sys.executable صالح؛ المكتبات
+    # يجب أن تكون في requirements داخل buildozer.spec، فلا نحاول التثبيت هنا.
+    if "ANDROID_ARGUMENT" in os.environ or "ANDROID_ROOT" in os.environ:
+        return
     try:
         __import__(import_name)
     except ImportError:
@@ -285,7 +298,7 @@ class TgDB:
         """يرجع (message_id أو None, dict)."""
         r = self.call("getChat", {"chat_id": self.users_ch})
         if not r.get("ok"):
-            raise TgError("تعذر الاتصال بالنت: " )
+            raise TgError("تعذر الاتصال بالنت: ")
         pm = (r.get("result") or {}).get("pinned_message")
         if pm and (pm.get("text") or "").startswith("#INDEX"):
             try:
@@ -922,31 +935,20 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def get_font_dir():
-    if platform == "android":
-        for path in ["/sdcard/debtbook_fonts", "/storage/emulated/0/debtbook_fonts"]:
-            try:
-                os.makedirs(path, exist_ok=True)
-                test = os.path.join(path, ".test")
-                with open(test, "w") as f:
-                    f.write("t")
-                os.remove(test)
-                return path
-            except Exception:
-                continue
-        try:
+    # [إصلاح كراش 1] حُذفت كل محاولات الكتابة في /sdcard/ و /storage/emulated/0
+    # لأنها ممنوعة في أندرويد 11+ (Scoped Storage). نستخدم مجلد التطبيق الخاص فقط،
+    # وعند أي فشل نرجع APP_DIR بدل أن يتوقف التطبيق.
+    try:
+        if platform == "android":
             from android.storage import app_storage_path
-            fallback = os.path.join(app_storage_path(), "fonts")
-            os.makedirs(fallback, exist_ok=True)
-            return fallback
-        except Exception:
-            return APP_DIR
-    else:
-        d = os.path.join(APP_DIR, "fonts")
-        try:
-            os.makedirs(d, exist_ok=True)
-        except Exception:
-            pass
+            d = os.path.join(app_storage_path(), "fonts")
+        else:
+            d = os.path.join(APP_DIR, "fonts")
+        os.makedirs(d, exist_ok=True)
         return d
+    except Exception as e:
+        print(f"[FONT] get_font_dir failed: {e}")
+        return APP_DIR
 
 
 FONT_DIR = get_font_dir()
@@ -961,10 +963,7 @@ FONT_CANDIDATES = [
     os.path.join(APP_DIR, "fonts", "font.otf"),
     os.path.join(APP_DIR, "fonts", "font.ttf"),
     os.path.join(FONT_DIR, "font.ttf"),
-    "/sdcard/debtbook_fonts/font.ttf",
-    "/sdcard/debtbook_fonts/font.ttf",
-    "/sdcard/Download/font.ttf",
-    "/sdcard/Download/font.ttf",
+    # [إصلاح كراش 3] حُذفت مسارات /sdcard/ نهائياً (تفشل على أندرويد 11+)
     "/system/fonts/NotoNaskhArabic-Regular.ttf",
     "/system/fonts/DroidSansArabic.ttf",
     "/system/fonts/NotoSansArabic-Regular.ttf",
@@ -993,9 +992,8 @@ def _scan_dir(d, only_names=None):
 def _iter_font_candidates():
     seen = set()
     pool = list(FONT_CANDIDATES)
-    for d in [APP_DIR, os.path.join(APP_DIR, "fonts"),
-              FONT_DIR,
-              "/sdcard/debtbook_fonts", "/sdcard/Download"]:
+    # [إصلاح كراش 4] نمسح فقط المجلدات الآمنة (مجلد التطبيق)، بدون /sdcard/
+    for d in [APP_DIR, os.path.join(APP_DIR, "fonts"), FONT_DIR]:
         pool.extend(_scan_dir(d))
     pool.extend(_scan_dir("/system/fonts",
                           only_names=("arab", "naskh", "kufi", "fallback")))
@@ -1039,26 +1037,35 @@ def _font_has_arabic(name):
 
 FONT_PATH = None
 FONT_REGISTERED = False
-_n = 0
-for _p in _iter_font_candidates():
-    _n += 1
-    _name = "AppFont%d" % _n
-    try:
-        LabelBase.register(name=_name, fn_regular=_p)
-    except Exception as e:
-        print(f"[FONT] ERR {_p}: {e}")
-        continue
-    if _font_has_arabic(_name):
-        FONT_NAME = _name
-        FONT_PATH = _p
-        FONT_REGISTERED = True
-        print(f"[FONT] OK: {_p}")
-        break
-    else:
-        print(f"[FONT] no arabic glyphs: {_p}")
 
-if not FONT_REGISTERED:
+
+def init_fallback_font():
+    """يبحث عن أول خط عربي صالح (مجلد التطبيق ثم خطوط النظام).
+    [إصلاح كراش 6] كل LabelBase.register داخل try/except مع log واضح، فلو فشل
+    خط واحد ننتقل للتالي ولا يتوقف التطبيق. وتعمل الدالة فقط لو font.otf
+    الأساسي غير موجود (فلا نختبر الخطوط عند كل تشغيل)."""
+    global FONT_NAME, FONT_PATH, FONT_REGISTERED
+    n = 0
+    for p in _iter_font_candidates():
+        n += 1
+        name = "AppFont%d" % n
+        try:
+            LabelBase.register(name=name, fn_regular=p)
+        except Exception as e:
+            print(f"[FONT] register FAILED {p}: {e}")
+            continue
+        try:
+            ok = _font_has_arabic(name)
+        except Exception as e:
+            print(f"[FONT] glyph test FAILED {p}: {e}")
+            continue
+        if ok:
+            FONT_NAME, FONT_PATH, FONT_REGISTERED = name, p, True
+            print(f"[FONT] OK: {p}")
+            return True
+        print(f"[FONT] no arabic glyphs: {p}")
     print("[FONT] WARN: no usable Arabic font found!")
+    return False
 
 
 def _font_name():
@@ -1082,8 +1089,8 @@ def font_label(fn):
 
 
 def _find_font_file(fn):
-    for d in (APP_DIR, os.path.join(APP_DIR, "fonts"), FONT_DIR,
-              "/sdcard/debtbook_fonts", "/sdcard/Download"):
+    # [إصلاح كراش 4] مجلدات التطبيق فقط، بدون /sdcard/
+    for d in (APP_DIR, os.path.join(APP_DIR, "fonts"), FONT_DIR):
         p = os.path.join(d, fn)
         try:
             if os.path.exists(p) and os.path.getsize(p) > 1000:
@@ -1115,7 +1122,7 @@ def register_user_fonts():
             LabelBase.register(name=nm, fn_regular=p)
             USER_FONTS[fn] = (nm, p)
         except Exception as e:
-            print(f"[FONT] user font {fn}: {e}")
+            print(f"[FONT] register FAILED for user font {fn} ({p}): {e}")
 
 
 def set_app_font(fn):
@@ -1147,7 +1154,39 @@ try:
     os.makedirs(FONT_STORE, exist_ok=True)
 except Exception:
     pass
-register_user_fonts()
+
+# [إصلاح كراش 7] تهيئة الخطوط كلها محمية بـ try/except: أي خطأ هنا لا يُسقط التطبيق.
+try:
+    register_user_fonts()
+    if not set_app_font("font.otf"):
+        init_fallback_font()
+except Exception as _fe:
+    print(f"[FONT] init failed (ignored): {_fe}")
+
+# ---- سجل الأعطال: يُكتب في مجلد التطبيق ويُعرض عند التشغيل التالي ----
+import traceback
+CRASH_LOG = os.path.join(DATA_DIR, "crash.log")
+
+
+def _write_crash(text):
+    try:
+        with open(CRASH_LOG, "a", encoding="utf-8") as f:
+            f.write(datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "\n" + text + "\n\n")
+    except Exception:
+        pass
+
+
+def _excepthook(tp, val, tb):
+    _write_crash("".join(traceback.format_exception(tp, val, tb)))
+    sys.__excepthook__(tp, val, tb)
+
+
+sys.excepthook = _excepthook
+try:
+    threading.excepthook = lambda a: _write_crash(
+        "".join(traceback.format_exception(a.exc_type, a.exc_value, a.exc_traceback)))
+except Exception:
+    pass
 
 
 def load_json(path, default):
@@ -2544,10 +2583,12 @@ def _publish_media(path, mime):
             out.close()
         return uri
 
-    # أندرويد 9 وأقدم: واتساب لا يقرأ مجلد التطبيق الخاص، فننسخ لمجلد عام
-    Env = autoclass("android.os.Environment")
-    pub_dir = os.path.join(Env.getExternalStorageDirectory().getAbsolutePath(),
-                           "Download", "DebtBook")
+    # [إصلاح كراش 5] أندرويد 9 وأقدم (SDK < 29): حُذف الكتابة في
+    # getExternalStorageDirectory()/Download. نستخدم مجلد التطبيق الخارجي الخاص
+    # getExternalFilesDir(null) (لا يحتاج أي صلاحية)، ونمرّر Uri.fromFile لواتساب.
+    ext = mActivity.getExternalFilesDir(None)
+    base = ext.getAbsolutePath() if ext is not None else os.path.dirname(path)
+    pub_dir = os.path.join(base, "DebtBook")
     os.makedirs(pub_dir, exist_ok=True)
     pub_path = os.path.join(pub_dir, os.path.basename(path))
     import shutil
@@ -2815,7 +2856,7 @@ class RegisterScreen(Screen):
         self.name_in = self._field(body, "الاسم الرباعي", "الاسم الكامل )أربعة أسماء(")
         self.shop_in = self._field(body, "اسم المشروع أو اسم الدكان", "مثال: بقالة النور")
         self.loc_in = self._field(body, "موقع الدكان )المنطقة(", "المنطقة التي يوجد فيها الدكان")
-        self.phone_in = self._field(body, "رقم التاجر", "77xxxxxxx", input_filter="int")
+        self.phone_in = self._field(body, "رقم التاجر", "771234567", input_filter="int")
         self.email_in = self._field(body, "البريد الإلكتروني (Gmail)", "example@gmail.com")
         self.pass_in = self._field(body, "كلمة المرور", "********")
         self.confirm_in = self._field(body, "تأكيد كلمة المرور", "********")
@@ -2936,7 +2977,7 @@ class TermsScreen(Screen):
         self.lay.bind(minimum_height=self.lay.setter("height"))
         for line in self._wrap(TERMS_TEXT):
             if line:
-                self.lay.add_widget(mk_text(line, dp(24), TEXT, height=dp(28)))
+                self.lay.add_widget(mk_text(line, dp(15), TEXT, height=dp(28)))
             else:
                 self.lay.add_widget(Widget(size_hint_y=None, height=dp(12)))
         self.scroll.add_widget(self.lay)
@@ -3661,7 +3702,7 @@ class SettingsScreen(Screen):
         add_btn("تعديل بيانات البائع", BLUE, self.app.open_edit_profile)
         add_btn("تغيير كلمة المرور", BLUE, self.app.open_change_password)
         add_btn("الأجهزة المتصلة بالحساب", BLUE, self.app.open_devices)
-        add_btn("الحسابات )تبديل / إضافة(", BLUE, self.app.open_accounts)
+        add_btn("الحسابات )تبديل / إضاف(", BLUE, self.app.open_accounts)
         add_btn("تغيير الخط", BLUE, self.app.open_fonts)
         add_btn("الوضع النهاري" if is_dark() else "الوضع الليلي", ORANGE,
                 self.app.toggle_theme)
@@ -3953,7 +3994,7 @@ class DevicesScreen(Screen):
                         self.confirm_kick(d, n))
                 row.add_widget(kb)
             box = BoxLayout(orientation="vertical")
-            nm = info.get("n", "جهاز") + ("  (هذا الجهاز)" if did == me else "")
+            nm = info.get("n", "جهاز") + ("  )هذا الجهاز(" if did == me else "")
             box.add_widget(mk_text(nm, dp(15), TEXT, hint_y=0.55))
             box.add_widget(mk_text("آخر مزامنة: " + str(info.get("t", ""))[:16],
                                    dp(12), MUTED, hint_y=0.45))
@@ -4089,7 +4130,7 @@ class FontScreen(Screen):
                 scan_downloads(cat)
                 self.app.save()
             except TgError as e:
-                err = None
+                err = str(e)
             except Exception:
                 err = "تعذر الاتصال، تحقق من الانترنت"
             Clock.schedule_once(lambda dt: self._after_scan(err), 0)
@@ -4209,13 +4250,9 @@ class DebtBookApp(App):
         except Exception:
             pass
 
-        if platform == "android":
-            try:
-                from android.permissions import request_permissions, Permission
-                request_permissions([Permission.READ_EXTERNAL_STORAGE,
-                                     Permission.WRITE_EXTERNAL_STORAGE])
-            except Exception as e:
-                print(f"[PERM] {e}")
+        # [إصلاح كراش 2] حُذف طلب صلاحيات READ/WRITE_EXTERNAL_STORAGE بالكامل:
+        # ملفات التطبيق داخل مجلده الخاص، والمشاركة عبر MediaStore، فلا حاجة لها
+        # (وهي ممنوعة/بلا أثر في أندرويد 13+).
 
         self.search_query = ""
         self._seq = 0
@@ -4230,12 +4267,40 @@ class DebtBookApp(App):
         self.sm.bind(current=lambda *a: schedule_refresh(0.25))
 
         self.sm.current = "login"
+        # [إصلاح كراش 7] أي شيء إضافي (عرض سجل الأعطال السابق) يتم بعد بدء التطبيق
+        Clock.schedule_once(self._show_last_crash, 1.5)
         # جلسة واحدة: لو فيه مستخدم محفوظ نفتح الرئيسية مباشرة
         if (self.data.get("user") or {}).get("email"):
             Clock.schedule_once(lambda dt: self._build_main_and_show(), 0.1)
         else:
             Clock.schedule_once(lambda dt: self.go_login(), 0.1)
         return self.sm
+
+    def _show_last_crash(self, dt=None):
+        """لو توقف التطبيق في المرة السابقة بخطأ، نعرض نصه ليسهل إصلاحه."""
+        try:
+            if not os.path.exists(CRASH_LOG):
+                return
+            with open(CRASH_LOG, "r", encoding="utf-8") as f:
+                txt = f.read()[-1500:]
+            os.remove(CRASH_LOG)
+            if not txt.strip():
+                return
+            box = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(10))
+            box.add_widget(mk_text("سجل آخر خطأ )صوّره وأرسله للمطوّر(:", dp(14),
+                                   RED, halign="center", height=dp(30)))
+            lbl = KLabel(text=txt, color=(0.3, 0.3, 0.3, 1), font_size=dp(10),
+                         halign="left", valign="top")
+            lbl.bind(size=lambda w, v: setattr(w, "text_size", (v[0], None)))
+            box.add_widget(lbl)
+            ok = mk_btn("حسناً", height=dp(46), background_color=GRAY_BTN)
+            box.add_widget(ok)
+            pop = make_arabic_popup("تقرير خطأ", box, size_hint=(0.95, 0.7),
+                                    title_color=RED, separator_color=RED)
+            ok.bind(on_release=lambda *a: pop.dismiss())
+            pop.open()
+        except Exception as e:
+            print(f"[CRASHLOG] {e}")
 
     # ==========================================================
     # تسجيل / دخول (يعمل من أي جهاز، بدون getUpdates)
@@ -4957,4 +5022,44 @@ class DebtBookApp(App):
 # 25) التشغيل
 # ============================================================
 if __name__ == "__main__":
-    DebtBookApp().run()
+    try:
+        DebtBookApp().run()
+    except Exception:
+        _write_crash(traceback.format_exc())   # يُعرض في التشغيل التالي
+        raise
+
+
+# ============================================================
+# 26) ملاحظات الإصلاح (تقرير الكراش)
+# ============================================================
+# أولاً: الأسباب الجذرية المحتملة للكراش (بالترتيب)
+#   1) كتابة/اختبار ملفات في /sdcard/ و /storage/emulated/0 وقت الاستيراد
+#      (get_font_dir) - ممنوع في أندرويد 11+ (Scoped Storage).
+#   2) طلب READ/WRITE_EXTERNAL_STORAGE في build() - بلا أثر/ممنوع في 13+.
+#      ملاحظة: لو كانت الصلاحيتان مكتوبتين أيضاً في buildozer.spec فيجب حذفهما
+#      من هناك (انظر "ثالثاً").
+#   3) مسح /sdcard/ و /sdcard/Download بحثاً عن خطوط (يفشل أو يتعطل).
+#   4) فرع أندرويد 9 وأقدم في _publish_media (getExternalStorageDirectory).
+#   5) اختبار الخطوط (CoreLabel) على مستوى الملف عند الاستيراد لكل ملف خط
+#      ممكن: بطيء وقد يسقط التطبيق قبل ظهور الشاشة. صار يعمل فقط عند غياب
+#      font.otf، وداخل try/except.
+#   6) محاولة pip install عند الاستيراد على أندرويد (لا pip هناك).
+#
+# ثانياً: التعديلات
+#   - get_font_dir: app_storage_path()/fonts فقط، وعند الفشل APP_DIR.
+#   - حذف request_permissions وكل مسارات /sdcard/ من الخطوط.
+#   - _publish_media: MediaStore لـ SDK>=29، و getExternalFilesDir(null)
+#     لـ SDK<29. لا شيء يحتاج WRITE_EXTERNAL_STORAGE.
+#   - LabelBase.register محاط بـ try/except مع log، وتهيئة الخطوط محمية.
+#   - لا شبكة ولا مسح مجلدات داخل build(). المزامنة والتحميلات في خيوط.
+#   - سجل أعطال: crash.log في مجلد التطبيق، ويظهر في نافذة عند فتح
+#     التطبيق مرة أخرى، ليصبح أي كراش متبقٍ قابلاً للتشخيص.
+#
+# ثالثاً: توصيات إضافية
+#   - في buildozer.spec:  android.permissions = INTERNET  (فقط).
+#     وتأكد من:  source.include_exts = py,png,jpg,otf,ttf
+#     و requirements تحتوي: python3,kivy,pillow,pyjnius,android,openssl
+#   - ابنِ بـ android.archs = arm64-v8a و android.api = 33 أو 34.
+#   - عند أي كراش شغّل:  adb logcat -s python:V AndroidRuntime:E
+#     فالسطر المهم يظهر عادة بعد "Traceback".
+#   - إن ظهر الكراش قبل رسم أي شاشة فالسبب غالباً نقص مكتبة في requirements.
