@@ -14,7 +14,7 @@ requirements = python3,kivy==2.3.1,pillow,requests
 orientation = portrait
 fullscreen = 0
 
-android.permissions = INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
+android.permissions = INTERNET
 
 android.api = 33
 android.minapi = 24
